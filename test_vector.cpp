@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#define _wyp wy_secret
 #include "wyhash.h"
 using namespace std;
 
