@@ -80,17 +80,25 @@ static inline uint64_t wyhash(const void *key, uint64_t len, uint64_t seed, cons
         }
         a = wy_read8(ptr + n - 16);
         b = wy_read8(ptr + n -  8);
-    } else if (len > 8) {
-        a = wy_read8(ptr);
-        b = wy_read8(ptr + len - 8);
     } else if (WY_LIKELY(len >= 4)) {
-        a = wy_read4(ptr);
-        b = wy_read4(ptr + len - 4);
+        /*
+        int64_t n = (int64_t) len - 8;
+        uint64_t offs = n < 0 ? 0 : n;
+        */
+        //uint64_t offs = len > 8 ? 4 : 0;
+        uint64_t offs = ((len - 1) >> 1) & 4;
+        //uint64_t offs = (3 * len - 10) >> 3;
+        //uint64_t offs = len < 8 ? 0 : len - 8;
+        //uint64_t offs = len < 8 ? len - 4 : 4;
+        a = wy_read4(ptr) | (uint64_t) wy_read4(ptr + offs) << 32;
+        ptr += len - offs - 4;
+        b = wy_read4(ptr) | (uint64_t) wy_read4(ptr + offs) << 32;
     } else {
         a = WY_LIKELY(len) ? wy_read3(ptr, len) : 0;
         b = 0;
     }
-    return wy_mix(secret[1] ^ len, wy_mix(a ^ secret[1], b ^ seed));
+    //return wy_mix(secret[1] ^ len, wy_mix(a ^ secret[1], b ^ seed));
+    return wy_mix(a ^ secret[1], b ^ seed ^ len);
 }
 
 static const uint64_t wy_secret[5] = {
