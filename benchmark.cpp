@@ -136,7 +136,11 @@ inline unsigned popcount(uint64_t x)
     return __builtin_popcountll(x);
 }
 
-double test_quality(unsigned len, uint64_t (*hash)(const void *ptr, size_t len, uint64_t seed))
+struct Quality {
+    double flip, one_bit;
+};
+
+Quality test_quality(unsigned len, uint64_t (*hash)(const void *ptr, size_t len, uint64_t seed))
 {
     static constexpr unsigned n_iter = 256, guard = 8;
 
@@ -160,27 +164,49 @@ double test_quality(unsigned len, uint64_t (*hash)(const void *ptr, size_t len, 
     unsigned stop = 8 * len + 8 * guard;
     for (unsigned i = 0; i < 8 * guard; i++)
         if (sum[i] || sum[i + stop])
-            return -1;
+            return {-1, -1};
 
     unsigned worst = -1;
     for (unsigned i = 8 * guard; i < stop; i++)
         worst = min(worst, sum[i]);
-    return worst / double(n_iter);
+
+    unsigned one_bit_sum = 0;
+    vector<uint64_t> one_bit_hash(8 * len);
+    for (uint8_t pattern : {0, -1}) {
+        for (uint8_t &val : data)
+            val = pattern;
+
+        for (unsigned iter = 0; iter < n_iter; iter++) {
+            unsigned one_bit = 64;
+            uint64_t seed = rand64();
+            for (unsigned i = 0; i < 8 * len; i++) {
+                data[guard + (i >> 3)] = pattern ^ (1 << (i & 7));
+                one_bit_hash[i] = hash(data.data() + guard, len, seed);
+                data[guard + (i >> 3)] = pattern;
+
+                for (unsigned j = 0; j < i; j++)
+                    one_bit = min(one_bit, popcount(one_bit_hash[i] ^ one_bit_hash[j]));
+            }
+            one_bit_sum += one_bit;
+        }
+    }
+    static constexpr double mul = 1 / double(n_iter);
+    return {worst * mul, one_bit_sum * (mul / 2)};
 }
 
 double test_quality(uint64_t (*hash)(const void *ptr, size_t len, uint64_t seed))
 {
     double worst = 64;
     for (unsigned len = 1; len <= 64; len++) {
-        double res = test_quality(len, hash);
+        Quality res = test_quality(len, hash);
         printf("Length %2u:  ", len);
-        if (res >= 0) {
-            printf("%5.2f\n", res);
-            worst = min(worst, res);
+        if (res.flip >= 0) {
+            printf("%5.2f  %5.2f\n", res.flip, res.one_bit);
+            worst = min(worst, res.flip);
             continue;
         }
         printf("FAIL\n");
-        return res;
+        return -1;
     }
     return worst;
 }
